@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">XNetApp</string>
+    <string name="prompt_volume">Volume</string>
+</resources>
