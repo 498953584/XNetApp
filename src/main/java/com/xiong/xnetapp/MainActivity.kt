@@ -11,52 +11,65 @@ import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.widget.TextView
 import kotlinx.android.synthetic.main.activity_main.*
+import android.os.Build
+import android.widget.Toast
 
 
 class MainActivity : AppCompatActivity() {
-
+    private var networkChangeReceiver: NetworkStateReceiver? = null
+    private var volumeBroadcastReceiver: VolumeBroadcastReceiver? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        var audioManager = this.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         var sp = this.run { getSharedPreferences("SP", Context.MODE_PRIVATE) } as SharedPreferences
+        var curr = sp.getInt("Volume", audioManager.getStreamVolume(AudioManager.STREAM_MUSIC))
+        var max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        curr = Math.round(curr * 100.0 / max).toInt()
+        //控件绑定事件
         Volume.run {
             setOnEditorActionListener(
                 TextView.OnEditorActionListener(
                     fun(textView: TextView, actionId: Int, event: KeyEvent?): Boolean {
+                        //完成，或键盘回车
                         if (actionId == EditorInfo.IME_ACTION_DONE ||
                             (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER &&
                                     event.action == KeyEvent.ACTION_DOWN)
                         ) {
-                            var volume = Integer.parseInt(textView.text.toString())
-                            if (volume in 0..100) {
-                                //存入数据
-                                var editor = sp.edit() as SharedPreferences.Editor
-                                editor.putInt("Volume", volume)
-                                editor.commit()
-                                var audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            curr = Integer.parseInt(textView.text.toString())
+                            return if (curr in 1..100) {
                                 audioManager.setStreamVolume(
                                     AudioManager.STREAM_MUSIC,
-                                    Math.round(volume / 100.0 * audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)).toInt(),
+                                    Math.round(curr / 100.0 * max).toInt(),
                                     AudioManager.FLAG_PLAY_SOUND
                                 )
-                                return false
+                                false
+                            } else {
+                                Toast.makeText(context, "请输入1-100的数字！", Toast.LENGTH_SHORT).show()
+                                true
                             }
-                            return true
                         }
                         return true
                     })
             )
-            setText(sp.getInt("Volume", 40).toString())
+            setText(curr.toString())
         }
+        //动态注册接收器
+        var intentFilter = IntentFilter("android.net.conn.CONNECTIVITY_CHANGE")
+        networkChangeReceiver = NetworkStateReceiver()
+        registerReceiver(networkChangeReceiver, intentFilter)
+        intentFilter = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+        volumeBroadcastReceiver = VolumeBroadcastReceiver()
+        registerReceiver(volumeBroadcastReceiver, intentFilter)
+    }
 
-//        var netBroadcastReceiver = NetworkStateReceiver()
-//        //实例化意图
-//        var filter = IntentFilter()
-//        //设置广播的类型
-//        filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION)
-//        //注册广播，有网络变化的时候会触发onReceive
-//        registerReceiver(netBroadcastReceiver, filter)
-        // 设置监听
-        //netBroadcastReceiver.setNetEvent(this)
+    override fun onDestroy() {
+        super.onDestroy()
+        if (networkChangeReceiver != null) {
+            unregisterReceiver(networkChangeReceiver)
+        }
+        if (volumeBroadcastReceiver != null) {
+            unregisterReceiver(volumeBroadcastReceiver)
+        }
     }
 }
